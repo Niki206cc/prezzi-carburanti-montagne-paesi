@@ -15,7 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -209,16 +209,19 @@ def render_image(dataset, day):
     state = load_state()
     image = Image.open(BASE_IMAGE).convert("RGB")
     ranked = rankings(dataset)
-    cheapest = [r[0] for p in ranked.values() for fuel, rows in p.items() if fuel == "Benzina" and (r := rows)]
-    line = f"{day.strftime('%d/%m/%Y')}"
-    if cheapest: line += f"  •  Benzina da {euro(min(x['price'] for x in cheapest))} €/l"
+    benzina = [r["price"] for r in dataset["records"] if r["fuel"] == "Benzina" and r["self"]]
+    diesel = [r["price"] for r in dataset["records"] if r["fuel"] == "Gasolio" and r["self"]]
+    line = day.strftime("%d/%m/%Y")
+    if benzina and diesel:
+        line += f"\nBenzina da {euro(min(benzina))} €/l  •  Diesel da {euro(min(diesel))} €/l"
     draw, font = ImageDraw.Draw(image), font_for(int(state["font_size"]))
     sw = int(state["stroke_width"])
-    box = draw.textbbox((0, 0), line, font=font, stroke_width=sw)
+    box = draw.multiline_textbbox((0, 0), line, font=font, stroke_width=sw, spacing=12, align="center")
     w, h = box[2] - box[0], box[3] - box[1]
     x = image.width * float(state["image_x"]) / 100 - w / 2
     y = image.height * float(state["image_y"]) / 100 - h / 2
-    draw.text((x, y), line, font=font, fill=state["text_color"], stroke_fill=state["stroke_color"], stroke_width=sw)
+    draw.multiline_text((x, y), line, font=font, fill=state["text_color"], stroke_fill=state["stroke_color"],
+                        stroke_width=sw, spacing=12, align="center")
     output = io.BytesIO(); image.save(output, "JPEG", quality=94, optimize=True); output.seek(0)
     return output
 
