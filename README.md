@@ -36,4 +36,4 @@ Dati del Ministero delle Imprese e del Made in Italy, licenza IODL 2.0. I file v
 
 ## Versione
 
-1.1.0
+1.1.1
