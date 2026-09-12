@@ -6,6 +6,8 @@ Applicazione Docker che scarica ogni giorno gli open data ufficiali MIMIT, selez
 
 - pannello responsive sulla porta `8087`;
 - anteprima reale dell'articolo;
+- titolo dinamico con i prezzi minimi di benzina e diesel;
+- sezioni grafiche separate per le province di Bergamo e Brescia;
 - orario e ID categoria modificabili dal pannello senza redeploy;
 - classifiche per Bergamo e Brescia;
 - benzina e diesel self-service, GPL e metano;
@@ -34,4 +36,4 @@ Dati del Ministero delle Imprese e del Made in Italy, licenza IODL 2.0. I file v
 
 ## Versione
 
-1.0.0
+1.1.0
