@@ -15,7 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -147,6 +147,15 @@ def euro(value):
     return f"{value:.3f}".replace(".", ",")
 
 
+def build_title(dataset, day):
+    benzina = [r["price"] for r in dataset["records"] if r["fuel"] == "Benzina" and r["self"]]
+    diesel = [r["price"] for r in dataset["records"] if r["fuel"] == "Gasolio" and r["self"]]
+    if not benzina or not diesel:
+        raise RuntimeError("Prezzo minimo di benzina o diesel non disponibile")
+    return (f"Benzina da {euro(min(benzina))} € e diesel da {euro(min(diesel))} € "
+            f"oggi a Bergamo e Brescia: prezzi del {day.strftime('%d/%m/%Y')}")
+
+
 def build_article(dataset, day):
     ranked = rankings(dataset)
     date_text = day.strftime("%d/%m/%Y")
@@ -156,12 +165,18 @@ def build_article(dataset, day):
         "<p>Le classifiche distinguono benzina e diesel in modalità self-service. Per GPL e metano vengono considerati gli impianti disponibili, dove il rifornimento è normalmente servito.</p>",
     ]
     for province, province_name in PROVINCES:
-        parts.append(f"<p><strong>Provincia di {province_name}</strong></p>")
+        parts.append(
+            '<div style="margin:28px 0 18px;padding:14px 18px;background:#17354f;color:#ffffff;border-radius:6px;">'
+            f'<p style="margin:0;font-size:22px;"><strong>PROVINCIA DI {province_name.upper()}</strong></p></div>'
+        )
         for fuel, label, prefer_self in FUELS:
             rows = ranked[province][fuel]
-            parts.append(f"<p><strong>{label}{' self-service' if prefer_self else ''}</strong><br>")
+            parts.append(
+                '<div style="margin:16px 0;padding:14px 16px;border-left:5px solid #18a999;background:#f3f6f8;">'
+                f"<p style=\"margin:0 0 10px;\"><strong>{label}{' self-service' if prefer_self else ''}</strong></p>"
+            )
             if not rows:
-                parts.append("Nessun prezzo sufficientemente aggiornato disponibile.<br>")
+                parts.append("<p>Nessun prezzo sufficientemente aggiornato disponibile.</p>")
             for index, row in enumerate(rows, 1):
                 station_name = row["name"] or row["brand"] or row["manager"] or "Distributore"
                 mode = "self" if row["self"] else "servito"
@@ -171,9 +186,10 @@ def build_article(dataset, day):
                     f"Prezzo: <strong>{euro(row['price'])} €/litro</strong> ({mode})<br>"
                     f"{html.escape(row['address'])}<br>"
                     f"Aggiornato il {row['updated'].strftime('%d/%m/%Y alle %H:%M')} – "
-                    f'<a href="{link}" target="_blank" rel="noopener noreferrer">📍 Apri su Google Maps</a><br>'
+                    f'<a href="{link}" target="_blank" rel="noopener noreferrer">📍 Apri su Google Maps</a>'
+                    f"{'<br><br>' if index < len(rows) else ''}"
                 )
-            parts.append("</p>")
+            parts.append("</div>")
     source_date = dataset["extraction_date"].strftime("%d/%m/%Y")
     parts.append(
         f'<p><small>Fonte: <a href="{SOURCE_URL}" target="_blank" rel="noopener noreferrer">Ministero delle Imprese e del Made in Italy</a>, '
@@ -239,12 +255,13 @@ def upload_image(dataset, day):
 def publish():
     with publish_lock:
         day = datetime.now(TZ)
-        title = f"Benzina e diesel oggi a Bergamo e Brescia: i distributori più economici del {day.strftime('%d/%m/%Y')}"
         state = load_state()
         try:
             validate_wp()
+            dataset = fetch_data()
+            title = build_title(dataset, day)
             if duplicate_exists(title): return {"message": "Articolo già presente: nessun duplicato creato"}
-            dataset = fetch_data(); content, _ = build_article(dataset, day); media_id = upload_image(dataset, day)
+            content, _ = build_article(dataset, day); media_id = upload_image(dataset, day)
             post = {"title": title, "content": content, "status": os.getenv("WP_POST_STATUS", "draft"),
                     "categories": [int(state["category_id"])]}
             if media_id: post["featured_media"] = media_id
@@ -274,7 +291,7 @@ def dashboard():
 def preview():
     try:
         data = fetch_data(); day = datetime.now(TZ); content, ranked = build_article(data, day)
-        return render_template("preview.html", title=f"Benzina e diesel oggi a Bergamo e Brescia: i distributori più economici del {day.strftime('%d/%m/%Y')}", content=content)
+        return render_template("preview.html", title=build_title(data, day), content=content)
     except Exception as exc:
         flash(f"Anteprima non disponibile: {exc}", "error"); return redirect(url_for("dashboard"))
 
