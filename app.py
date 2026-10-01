@@ -15,7 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "1.1.1"
+VERSION = "1.2.0"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -26,6 +26,7 @@ TZ = ZoneInfo(os.getenv("TZ", "Europe/Rome"))
 ANAG_URL = "https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv"
 PRICE_URL = "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv"
 SOURCE_URL = "https://www.mimit.gov.it/it/open-data/elenco-dataset/carburanti-prezzi-praticati-e-anagrafica-degli-impianti"
+MAX_PRICE_AGE_DAYS = 7
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s",
                     handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()])
@@ -53,7 +54,6 @@ def load_state():
         "publish_time": os.getenv("PUBLISH_TIME", "09:30"),
         "category_id": int(os.getenv("WP_CATEGORY_ID", "1869") or 1869),
         "top_count": int(os.getenv("TOP_COUNT", "5") or 5),
-        "max_age_days": int(os.getenv("MAX_PRICE_AGE_DAYS", "8") or 8),
         "last_publish": None, "last_url": None, "last_error": None,
         "image_x": 50, "image_y": 73, "font_size": 62,
         "text_color": "#ffffff", "stroke_color": "#000000", "stroke_width": 2,
@@ -95,8 +95,9 @@ def fetch_data():
             "province": province, "lat": row.get("Latitudine", "").strip(), "lon": row.get("Longitudine", "").strip(),
         }
     price_date, price_rows = download_csv(PRICE_URL)
-    state = load_state()
-    cutoff = datetime.now(TZ).replace(tzinfo=None) - timedelta(days=state["max_age_days"])
+    # Il limite e fisso: un vecchio state.json o una variabile d'ambiente non
+    # devono far rientrare nell'articolo prezzi comunicati oltre una settimana fa.
+    cutoff = datetime.now(TZ).replace(tzinfo=None) - timedelta(days=MAX_PRICE_AGE_DAYS)
     records = []
     accepted = {x[0].lower(): x for x in FUELS}
     for row in price_rows:
@@ -161,7 +162,8 @@ def build_article(dataset, day):
     date_text = day.strftime("%d/%m/%Y")
     parts = [
         f"<p><strong>Prezzi di benzina e diesel oggi, {date_text}, nelle province di Bergamo e Brescia.</strong> "
-        "Ecco i distributori più economici rilevati nei dati ufficiali del Ministero delle Imprese e del Made in Italy, con il collegamento diretto a Google Maps.</p>",
+        "Ecco i distributori più economici rilevati nei dati ufficiali del Ministero delle Imprese e del Made in Italy, con il collegamento diretto a Google Maps. "
+        "Sono incluse esclusivamente rilevazioni comunicate negli ultimi 7 giorni.</p>",
         "<p>Le classifiche distinguono benzina e diesel in modalità self-service. Per GPL e metano vengono considerati gli impianti disponibili, dove il rifornimento è normalmente servito.</p>",
     ]
     for province, province_name in PROVINCES:
@@ -185,7 +187,8 @@ def build_article(dataset, day):
                     f"<strong>{index}. {html.escape(station_name)}</strong> – {html.escape(row['city'])}<br>"
                     f"Prezzo: <strong>{euro(row['price'])} €/litro</strong> ({mode})<br>"
                     f"{html.escape(row['address'])}<br>"
-                    f"Aggiornato il {row['updated'].strftime('%d/%m/%Y alle %H:%M')} – "
+                    f"Ultima rilevazione di prezzo comunicata al MIMIT: "
+                    f"<strong>{row['updated'].strftime('%d/%m/%Y alle %H:%M')}</strong><br>"
                     f'<a href="{link}" target="_blank" rel="noopener noreferrer">📍 Apri su Google Maps</a>'
                     f"{'<br><br>' if index < len(rows) else ''}"
                 )
@@ -193,8 +196,12 @@ def build_article(dataset, day):
     source_date = dataset["extraction_date"].strftime("%d/%m/%Y")
     parts.append(
         f'<p><small>Fonte: <a href="{SOURCE_URL}" target="_blank" rel="noopener noreferrer">Ministero delle Imprese e del Made in Italy</a>, '
-        f"open data con licenza IODL 2.0, estrazione del {source_date}. I prezzi sono comunicati dai gestori e possono variare: "
-        "prima del rifornimento verificare sempre il prezzo esposto presso l’impianto.</small></p>"
+        f"open data con licenza IODL 2.0. Ultima estrazione del dataset disponibile sul sito MIMIT: <strong>{source_date}</strong>.</small></p>"
+    )
+    parts.append(
+        '<div style="margin:22px 0;padding:14px 16px;border:1px solid #d6a100;background:#fff8dc;border-radius:6px;">'
+        '<p style="margin:0;"><strong>Avvertenza:</strong> prima del rifornimento verificare sempre il prezzo esposto alla pompa. '
+        'I prezzi sono comunicati dai gestori al MIMIT, possono subire variazioni successive e potrebbero contenere ritardi o errori di comunicazione.</p></div>'
     )
     return "\n".join(parts), ranked
 
