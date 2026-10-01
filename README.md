@@ -6,6 +6,7 @@ Applicazione Docker che scarica ogni giorno gli open data ufficiali MIMIT, selez
 
 - pannello responsive sulla porta `8087`;
 - anteprima reale dell'articolo;
+- controllo separato dei dati MIMIT, senza invio a WordPress, con tabella ed esportazione CSV;
 - titolo dinamico con i prezzi minimi di benzina e diesel;
 - sezioni grafiche separate per le province di Bergamo e Brescia;
 - orario e ID categoria modificabili dal pannello senza redeploy;
@@ -38,4 +39,4 @@ Dati del Ministero delle Imprese e del Made in Italy, licenza IODL 2.0. I file v
 
 ## Versione
 
-1.2.0
+1.3.0
