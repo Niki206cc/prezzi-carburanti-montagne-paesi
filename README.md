@@ -12,7 +12,9 @@ Applicazione Docker che scarica ogni giorno gli open data ufficiali MIMIT, selez
 - classifiche per Bergamo e Brescia;
 - benzina e diesel self-service, GPL e metano;
 - numero di risultati configurabile;
-- esclusione automatica dei prezzi troppo vecchi;
+- inclusione esclusiva dei prezzi comunicati al MIMIT negli ultimi 7 giorni;
+- data e ora dell'ultima rilevazione MIMIT visibili per ogni prezzo;
+- data dell'ultima estrazione del dataset e avvertenza di verifica alla pompa;
 - Google Maps tramite coordinate MIMIT, senza API key;
 - stato bozza/pubblicato configurabile;
 - pubblicazione manuale e automatica con blocco duplicati;
@@ -36,4 +38,4 @@ Dati del Ministero delle Imprese e del Made in Italy, licenza IODL 2.0. I file v
 
 ## Versione
 
-1.1.1
+1.2.0
