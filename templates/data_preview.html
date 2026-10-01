@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Verifica dati MIMIT</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+</head>
+<body>
+<main>
+  <header><div><h1>Verifica dati MIMIT</h1><p>Nessun dato viene inviato a WordPress</p></div><span>{{now.strftime('%d/%m/%Y %H:%M')}}</span></header>
+  <section><div class="actions">
+    <a class="button secondary" href="{{url_for('dashboard')}}">Torna al pannello</a>
+    <a class="button data" href="{{url_for('data_export')}}">Scarica CSV filtrato</a>
+    <a class="button" href="{{url_for('data_preview')}}">Aggiorna dati</a>
+  </div></section>
+  <section>
+    <h2>Esito del controllo</h2>
+    <div class="summary">
+      <div><small>Impianti BG e BS</small><strong>{{dataset.stations}}</strong></div>
+      <div><small>Rilevazioni utilizzabili</small><strong>{{rows|length}}</strong></div>
+      <div><small>Escluse perché vecchie</small><strong>{{dataset.stats.rows_stale}}</strong></div>
+      <div><small>Non valide</small><strong>{{dataset.stats.rows_invalid}}</strong></div>
+    </div>
+    <p><strong>Dataset prezzi MIMIT:</strong> {{dataset.price_date.strftime('%d/%m/%Y')}}</p>
+    <p><strong>Dataset impianti MIMIT:</strong> {{dataset.anagrafica_date.strftime('%d/%m/%Y')}}</p>
+    <p><strong>Limite applicato:</strong> sono mostrate soltanto le rilevazioni successive al {{dataset.cutoff.strftime('%d/%m/%Y alle %H:%M')}}.</p>
+  </section>
+  <section>
+    <h2>Rilevazioni che possono entrare nell'articolo</h2>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Provincia</th><th>Carburante</th><th>Prezzo</th><th>Modalità</th><th>Impianto</th><th>Comune</th><th>Ultima rilevazione MIMIT</th><th>Mappa</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td>{{row.province}}</td><td>{{row.fuel}}</td><td><strong>{{'%.3f'|format(row.price)|replace('.', ',')}} €</strong></td>
+        <td>{{'self' if row.self else 'servito'}}</td><td>{{row.name or row.brand or row.manager or 'Distributore'}}</td>
+        <td>{{row.city}}</td><td>{{row.updated.strftime('%d/%m/%Y %H:%M')}}</td>
+        <td><a href="{{maps_url(row)}}" target="_blank" rel="noopener noreferrer">Apri</a></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+</main>
+</body>
+</html>
