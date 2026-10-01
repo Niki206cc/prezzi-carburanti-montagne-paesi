@@ -15,7 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -99,24 +99,36 @@ def fetch_data():
     # devono far rientrare nell'articolo prezzi comunicati oltre una settimana fa.
     cutoff = datetime.now(TZ).replace(tzinfo=None) - timedelta(days=MAX_PRICE_AGE_DAYS)
     records = []
+    stats = {"rows_total": 0, "rows_local": 0, "rows_stale": 0, "rows_invalid": 0}
     accepted = {x[0].lower(): x for x in FUELS}
     for row in price_rows:
+        stats["rows_total"] += 1
         station = stations.get(row.get("idImpianto", "").strip())
         fuel = row.get("descCarburante", "").strip()
         if not station or fuel.lower() not in accepted:
             continue
+        stats["rows_local"] += 1
         try:
             updated = datetime.strptime(row["dtComu"].strip(), "%d/%m/%Y %H:%M:%S")
             price = float(row["prezzo"].replace(",", "."))
         except (ValueError, KeyError):
+            stats["rows_invalid"] += 1
             continue
-        if updated < cutoff or price <= 0:
+        if price <= 0:
+            stats["rows_invalid"] += 1
+            continue
+        if updated < cutoff:
+            stats["rows_stale"] += 1
             continue
         records.append(station | {"fuel": accepted[fuel.lower()][0], "price": price,
                                   "self": row.get("isSelf", "0").strip() == "1", "updated": updated})
     if not records:
         raise RuntimeError("Nessun prezzo valido trovato per Bergamo e Brescia")
-    return {"extraction_date": min(anag_date, price_date), "records": records, "stations": len(stations)}
+    return {
+        "extraction_date": min(anag_date, price_date), "anagrafica_date": anag_date,
+        "price_date": price_date, "cutoff": cutoff, "records": records,
+        "stations": len(stations), "stats": stats,
+    }
 
 
 def rankings(dataset):
@@ -304,6 +316,38 @@ def preview():
         return render_template("preview.html", title=build_title(data, day), content=content)
     except Exception as exc:
         flash(f"Anteprima non disponibile: {exc}", "error"); return redirect(url_for("dashboard"))
+
+
+@app.get("/data-preview")
+def data_preview():
+    try:
+        dataset = fetch_data()
+        rows = sorted(dataset["records"],
+                      key=lambda row: (row["province"], row["fuel"], row["price"], -row["updated"].timestamp()))
+        return render_template("data_preview.html", dataset=dataset, rows=rows, now=datetime.now(TZ), maps_url=maps_url)
+    except Exception as exc:
+        flash(f"Dati MIMIT non disponibili: {exc}", "error")
+        return redirect(url_for("dashboard"))
+
+
+@app.get("/data-export.csv")
+def data_export():
+    try:
+        dataset = fetch_data()
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";")
+        writer.writerow(["Provincia", "Comune", "Impianto", "Bandiera", "Indirizzo", "Carburante",
+                         "Modalita", "Prezzo euro/litro", "Ultima rilevazione MIMIT", "Google Maps"])
+        for row in sorted(dataset["records"], key=lambda item: (item["province"], item["fuel"], item["price"])):
+            writer.writerow([row["province"], row["city"], row["name"], row["brand"], row["address"],
+                             row["fuel"], "self" if row["self"] else "servito", euro(row["price"]),
+                             row["updated"].strftime("%d/%m/%Y %H:%M"), maps_url(row)])
+        filename = f"prezzi-mimit-ultimi-7-giorni-{datetime.now(TZ).strftime('%Y-%m-%d')}.csv"
+        return app.response_class("\ufeff" + output.getvalue(), mimetype="text/csv; charset=utf-8",
+                                  headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    except Exception as exc:
+        flash(f"Esportazione non disponibile: {exc}", "error")
+        return redirect(url_for("dashboard"))
 
 
 @app.post("/settings")
